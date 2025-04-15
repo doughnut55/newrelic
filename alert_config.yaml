@@ -1,0 +1,189 @@
+# Alert Configuration
+
+# Common Settings
+common:
+  violation_time_limit_seconds: 3600
+  threshold_duration: 300
+
+# Browser Alerts
+browser:
+  page_load_time_warning:
+    aggregation_window: 60
+    aggregation_delay: 120
+    critical:
+      threshold: 5.0
+    warning:
+      threshold: 3.0
+  
+  page_load_time_95th:
+    aggregation_window: 60
+    aggregation_delay: 120
+    critical:
+      threshold: 8.0
+    warning:
+      threshold: 6.0
+
+# API Alerts
+api:
+  evaluation_offset: 3
+  
+  performance:
+    critical:
+      threshold: 1.0
+    warning:
+      threshold: 0.5
+  
+  error_rate:
+    critical:
+      threshold: 5.0
+    warning:
+      threshold: 2.0
+  
+  latency:
+    critical:
+      threshold: 2.0
+    warning:
+      threshold: 1.5
+  
+  uptime:
+    critical:
+      threshold: 99.9
+    warning:
+      threshold: 99.95
+  
+  response_time:
+    critical:
+      threshold: 0.8
+    warning:
+      threshold: 0.5
+  
+  throttling:
+    critical:
+      threshold: 100
+    warning:
+      threshold: 80
+  
+  rate_limiting:
+    critical:
+      threshold: 10
+    warning:
+      threshold: 5
+
+# Application Monitoring Alerts
+application:
+  availability:
+    critical:
+      threshold: 99.9
+    warning:
+      threshold: 99.95
+  
+  latency:
+    critical:
+      threshold: 2.0
+    warning:
+      threshold: 1.0
+  
+  cpu:
+    critical:
+      threshold: 90
+    warning:
+      threshold: 80
+  
+  memory:
+    critical:
+      threshold: 90
+    warning:
+      threshold: 80
+  
+  response_rate:
+    critical:
+      threshold: 5
+    warning:
+      threshold: 10
+  
+  apdex:
+    critical:
+      threshold: 70
+    warning:
+      threshold: 80
+
+# Database Alerts
+database:
+  aggregation_window: 60
+  aggregation_delay: 120
+  
+  availability:
+    critical:
+      threshold: 1
+      threshold_duration: 300
+    warning:
+      threshold: 1
+      threshold_duration: 180
+  
+  query_response_time:
+    critical:
+      threshold: 0.5
+    warning:
+      threshold: 0.2
+  
+  cpu:
+    critical:
+      threshold: 90
+    warning:
+      threshold: 80
+  
+  memory:
+    critical:
+      threshold: 95
+    warning:
+      threshold: 85
+  
+  connection_pool:
+    critical:
+      threshold: 90
+    warning:
+      threshold: 80
+
+# Infrastructure Alerts
+infrastructure:
+  cpu:
+    critical:
+      threshold: 85
+    warning:
+      threshold: 70
+  
+  memory:
+    critical:
+      threshold: 90
+    warning:
+      threshold: 75
+  
+  network_throughput:
+    critical:
+      threshold: 100000000
+    warning:
+      threshold: 80000000
+  
+  network_latency:
+    critical:
+      threshold: 300
+    warning:
+      threshold: 150
+  
+  disk_io:
+    critical:
+      threshold: 85000000
+    warning:
+      threshold: 70000000
+  
+  storage:
+    critical:
+      threshold: 90
+    warning:
+      threshold: 75
+  
+  network_errors:
+    critical:
+      threshold: 30
+    warning:
+      threshold: 10
