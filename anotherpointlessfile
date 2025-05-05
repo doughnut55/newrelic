@@ -1,0 +1,294 @@
+# Provider configuration
+terraform {
+  required_providers {
+    newrelic = {
+      source  = "newrelic/newrelic"
+      version = "~> 3.15.0"
+    }
+  }
+  required_version = ">= 0.13"
+}
+
+provider "newrelic" {
+  account_id = var.account_id
+  api_key    = var.api_key
+  region     = var.region
+}
+
+# Variables
+variable "account_id" {
+  description = "New Relic Account ID"
+  type        = number
+}
+
+variable "api_key" {
+  description = "New Relic API Key"
+  type        = string
+  sensitive   = true
+}
+
+variable "region" {
+  description = "New Relic region (US or EU)"
+  type        = string
+  default     = "US"
+}
+
+# Create Java monitoring dashboard
+resource "newrelic_one_dashboard" "java_dashboard" {
+  name        = "Java"
+  permissions = "PUBLIC_READ_WRITE"
+
+  # ===== PAGE 1: Overview =====
+  page {
+    name = "Overview"
+
+    widget_markdown {
+      title  = ""
+      row    = 1
+      column = 1
+      width  = 2
+      height = 2
+      
+      text = "![java icon](https://raw.githubusercontent.com/newrelic/newrelic-quickstarts/d81ac26d7136376a5f800d6680903c5630d4abca/quickstarts/java/java/logo.svg)"
+    }
+
+    widget_bar {
+      title  = "Applications Name (click on the application name to filter)"
+      row    = 1
+      column = 3
+      width  = 4
+      height = 4
+      
+      nrql_query {
+        query = "FROM Transaction SELECT count(*) FACET appName"
+      }
+    }
+
+    widget_line {
+      title  = "CPU Utilization"
+      row    = 1
+      column = 7
+      width  = 6
+      height = 4
+      
+      nrql_query {
+        query = "SELECT min(apm.service.cpu.usertime.utilization) as 'Minimum CPU Utilization', max(apm.service.cpu.usertime.utilization) as 'Maximum CPU Utilization', average(apm.service.cpu.usertime.utilization) as 'Average CPU Utilization' FROM Metric TIMESERIES AUTO"
+      }
+    }
+
+    widget_markdown {
+      title  = ""
+      row    = 3
+      column = 1
+      width  = 2
+      height = 2
+      
+      text = <<EOT
+**About**
+
+Instrument your application with New Relic - [Add Data](https://one.newrelic.com/catalog-pack-details?state=d195dd17-d3c0-b196-584c-312b3d0ceb73).
+
+
+[Please rate this dashboard](https://docs.google.com/forms/d/e/1FAIpQLSclR38J8WbbB2J1tHnllKUkzWZkJhf4SrJGyavpMd4t82NjnQ/viewform?usp=pp_url&entry.1615922415=JAVA&entry.358368110=https://onenr.io/0qwyJE25zRn) here and let us know how we can improve it for you.
+EOT
+    }
+
+    widget_area {
+      title  = "Servlet Request Initialized"
+      row    = 5
+      column = 1
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT average(newrelic.timeslice.value) * 1000 AS `Java/javax.servlet.ServletRequestListener/requestInitialized` FROM Metric WHERE metricTimesliceName = 'Java/javax.servlet.ServletRequestListener/requestInitialized' TIMESERIES"
+      }
+    }
+
+    widget_billboard {
+      title  = "Average Error Rate"
+      row    = 5
+      column = 5
+      width  = 3
+      height = 3
+      
+      nrql_query {
+        query = "FROM Metric SELECT average(newrelic.goldenmetrics.apm.application.errorRate) AS ''"
+      }
+
+      threshold {
+        value               = -1
+        operator            = "above"
+        threshold_critical  = true
+      }
+    }
+
+    widget_pie {
+      title  = "Segment Names"
+      row    = 5
+      column = 8
+      width  = 5
+      height = 3
+      
+      nrql_query {
+        query = "FROM Metric select count(apm.service.overview.web) facet segmentName"
+      }
+    }
+
+    widget_bar {
+      title  = "Code Function"
+      row    = 8
+      column = 1
+      width  = 6
+      height = 3
+      
+      nrql_query {
+        query = "SELECT count(*) FROM Span FACET code.function limit max"
+      }
+    }
+
+    widget_line {
+      title  = "Http Status Code"
+      row    = 8
+      column = 7
+      width  = 6
+      height = 3
+      
+      nrql_query {
+        query = "SELECT latest(`http.statusCode`) FROM Transaction TIMESERIES"
+      }
+    }
+  }
+
+  # ===== PAGE 2: Transaction =====
+  page {
+    name = "Transaction"
+
+    widget_markdown {
+      title  = ""
+      row    = 1
+      column = 1
+      width  = 12
+      height = 1
+      
+      text = "# Transaction \nLeverage on New Relic's APM (Application Performance Monitoring) capabilities by setting up errors rate, application throughput."
+    }
+
+    widget_billboard {
+      title  = "Transactions Overview"
+      row    = 2
+      column = 1
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "FROM Transaction SELECT count(*) as 'Total transactions', average(duration) as 'Avg duration (s)', percentile(duration, 90) as 'Slowest 10% (s)', percentage(count(*), WHERE error is false) AS 'Success rate', percentage(count(*), WHERE error is true) AS 'Failed rate'"
+      }
+    }
+
+    widget_pie {
+      title  = "Top Popular Transactions"
+      row    = 2
+      column = 5
+      width  = 8
+      height = 3
+      
+      nrql_query {
+        query = "SELECT count(*) FROM Transaction SINCE today FACET name"
+      }
+    }
+
+    widget_bar {
+      title  = "Transaction Types(click on the transaction type to filter)"
+      row    = 5
+      column = 1
+      width  = 2
+      height = 3
+      
+      nrql_query {
+        query = "FROM Transaction SELECT count(*) FACET transactionType"
+      }
+    }
+
+    widget_line {
+      title  = "Adpex Score (second)"
+      row    = 5
+      column = 3
+      width  = 3
+      height = 3
+      
+      nrql_query {
+        query = "SELECT apdex( duration , t:0.4) FROM Transaction TIMESERIES"
+      }
+    }
+
+    widget_bar {
+      title  = "Web Transactions Histogram"
+      row    = 5
+      column = 6
+      width  = 3
+      height = 3
+      
+      nrql_query {
+        query = "SELECT histogram(duration, 1, 100) as 'Web requests' FROM Transaction LIMIT MAX"
+      }
+    }
+
+    widget_bar {
+      title  = "Top 5 Slowest Transactions Per Day"
+      row    = 5
+      column = 9
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT max(duration) FROM Transaction SINCE today LIMIT 5 FACET name"
+      }
+    }
+
+    widget_billboard {
+      title  = "Average Transaction Duration Today Compared With 1 Day Ago"
+      row    = 8
+      column = 1
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT average(duration) FROM Transaction SINCE today COMPARE WITH 1 day ago"
+      }
+    }
+
+    widget_line {
+      title  = "Total Time"
+      row    = 8
+      column = 5
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT average(totalTime) FROM Transaction TIMESERIES"
+      }
+    }
+
+    widget_line {
+      title  = "Throughput"
+      row    = 8
+      column = 9
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT rate(count(apm.service.transaction.duration), 1 minute) FROM Metric TIMESERIES"
+      }
+    }
+  }
+
+  # ===== PAGE 3: JVMs =====
+  page {
+    name = "JVMs"
+
+    widget_markdown {
+      title  = ""
+      row    = 1
+      column = 1
+      width  =
