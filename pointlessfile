@@ -1,0 +1,866 @@
+# Provider configuration
+terraform {
+  required_providers {
+    newrelic = {
+      source  = "newrelic/newrelic"
+      version = "~> 3.15.0"
+    }
+  }
+  required_version = ">= 0.13"
+}
+
+provider "newrelic" {
+  account_id = var.account_id
+  api_key    = var.api_key
+  region     = var.region
+}
+
+# Variables
+variable "account_id" {
+  description = "New Relic Account ID"
+  type        = number
+}
+
+variable "api_key" {
+  description = "New Relic API Key"
+  type        = string
+  sensitive   = true
+}
+
+variable "region" {
+  description = "New Relic region (US or EU)"
+  type        = string
+  default     = "US"
+}
+
+# Create Kubernetes dashboard
+resource "newrelic_one_dashboard" "kubernetes_dashboard" {
+  name        = "Kubernetes Dashboard"
+  description = "Get a high level overview of your Kubernetes instances"
+  permissions = "PUBLIC_READ_WRITE"
+
+  # ===== PAGE 1: Kubernetes =====
+  page {
+    name = "Kubernetes"
+
+    widget_billboard {
+      title  = "Resources Used"
+      row    = 1
+      column = 1
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT (average(cpuUsedCores) * uniqueCount(entityName)) AS `Cores`, ((average(memoryWorkingSetBytes) * uniqueCount(entityName)) / 1000000000) AS `Mem GB` FROM K8sNodeSample UNTIL 1 MINUTES AGO"
+      }
+    }
+
+    widget_billboard {
+      title  = "# of K8s Objects"
+      row    = 1
+      column = 5
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT uniqueCount(K8sNodeSample.entityId) as 'Nodes', uniqueCount(K8sNamespaceSample.clusterName) as 'Clusters', uniqueCount(K8sNamespaceSample.entityId) as 'Namespaces', uniqueCount(K8sDeploymentSample.entityId) as 'Deployments', uniqueCount(K8sPodSample.entityId) as 'Pods', uniqueCount(K8sContainerSample.containerID) as 'Containers' FROM K8sNodeSample, K8sNamespaceSample, K8sDeploymentSample, K8sPodSample, K8sContainerSample UNTIL 1 minute ago"
+      }
+    }
+
+    widget_markdown {
+      title  = ""
+      row    = 1
+      column = 9
+      width  = 4
+      height = 3
+
+      text = <<EOT
+# Kubernetes 
+
+This dashboard provides an overview of your Kubernetes platform health. Apply filters to focus on a specific cluster or namespace.
+
+EOT
+    }
+
+    widget_bar {
+      title  = "Namespaces per Cluster"
+      row    = 4
+      column = 1
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT uniqueCount(namespaceName) FROM K8sPodSample UNTIL 1 MINUTES AGO FACET clusterName LIMIT 100"
+      }
+    }
+
+    widget_bar {
+      title  = "Pods by Namespace"
+      row    = 4
+      column = 5
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT uniqueCount(podName) AS `pod` FROM K8sPodSample UNTIL 1 MINUTES AGO FACET namespaceName LIMIT 100"
+      }
+    }
+
+    widget_area {
+      title  = "Container Restarts"
+      row    = 4
+      column = 9
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT (max(restartCount) - min(restartCount)) AS `Restarts` FROM K8sContainerSample UNTIL 1 MINUTES AGO FACET tuple(clusterName, podName, containerName) LIMIT 50 TIMESERIES AUTO"
+      }
+    }
+
+    widget_line {
+      title  = "Container CPU Usage - % Used vs Limit"
+      row    = 7
+      column = 1
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT ((latest(cpuUsedCores) / latest(cpuLimitCores)) * 100) AS `% CPU` FROM K8sContainerSample UNTIL 1 MINUTES AGO FACET tuple(clusterName, podName, containerName) LIMIT 50 TIMESERIES AUTO"
+      }
+    }
+
+    widget_line {
+      title  = "Container Memory Usage - % Used vs Limit"
+      row    = 7
+      column = 5
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT latest(memoryWorkingSetUtilization) AS `% Memory` FROM K8sContainerSample UNTIL 1 MINUTES AGO FACET tuple(clusterName, podName, containerName) LIMIT 50 TIMESERIES AUTO"
+      }
+    }
+
+    widget_line {
+      title  = "Volume Usage - % Used"
+      row    = 7
+      column = 9
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT latest(fsUsedPercent) FROM K8sVolumeSample FACET tuple(podName, volumeName, pvcName) TIMESERIES AUTO"
+      }
+    }
+
+    widget_line {
+      title  = "Container CPU Cores Used"
+      row    = 10
+      column = 1
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT average(cpuUsedCores) AS `CPU Cores Used` FROM K8sContainerSample SINCE 60 MINUTES AGO UNTIL 1 MINUTES AGO FACET tuple(clusterName, podName, containerName) LIMIT 50 TIMESERIES AUTO"
+      }
+    }
+
+    widget_line {
+      title  = "Container MBytes of Memory Used"
+      row    = 10
+      column = 5
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT average((memoryWorkingSetBytes / 1000000)) AS `MB of Mem` FROM K8sContainerSample SINCE 60 MINUTES AGO UNTIL 1 MINUTES AGO FACET tuple(clusterName, podName, containerName) LIMIT 50 TIMESERIES AUTO"
+      }
+    }
+
+    widget_area {
+      title  = "Missing Pods by Deployment"
+      row    = 10
+      column = 9
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT (latest(podsDesired) - latest(podsReady)) AS `Missing Pods` FROM K8sReplicasetSample SINCE 10 MINUTES AGO UNTIL 1 MINUTES AGO FACET tuple(clusterName, deploymentName) LIMIT 50 TIMESERIES AUTO"
+      }
+    }
+
+    widget_table {
+      title  = "Latest pods not Running by Cluster/Namespace"
+      row    = 13
+      column = 1
+      width  = 8
+      height = 3
+
+      nrql_query {
+        query = "SELECT latest(status) as 'Status', max(timestamp) as 'Timestamp' from K8sPodSample WHERE status NOT IN ('Running', 'Succeeded') facet clusterName, namespace, podName since 10 minutes ago UNTIL 1 minute ago limit 100"
+      }
+    }
+
+    widget_line {
+      title  = "Containers by Namespace"
+      row    = 13
+      column = 9
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT uniqueCount(containerID) FROM K8sContainerSample FACET namespaceName TIMESERIES AUTO"
+      }
+    }
+
+    widget_table {
+      title  = "Node Resource Consumption"
+      row    = 16
+      column = 1
+      width  = 8
+      height = 3
+
+      nrql_query {
+        query = "SELECT latest(cpuUsedCores) AS `Used Cores`, (latest(memoryWorkingSetBytes) / 1000000) AS `Used Memory MB`, uniqueCount(`k8s`.`podName`) AS `Pods` FROM K8sNodeSample SINCE 10 MINUTES AGO UNTIL 1 MINUTES AGO FACET nodeName LIMIT 100"
+      }
+    }
+
+    widget_line {
+      title  = "Active Pods by Deployment"
+      row    = 16
+      column = 9
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT uniqueCount(podName) FROM K8sPodSample WHERE (((status = 'Running') AND NOT (createdAt IS NULL)) AND NOT (deploymentName IS NULL)) SINCE 10 MINUTES AGO UNTIL 1 MINUTES AGO FACET tuple(clusterName, deploymentName) LIMIT 50 TIMESERIES AUTO"
+      }
+    }
+
+    widget_table {
+      title  = "Volumes Usage > 90%"
+      row    = 19
+      column = 1
+      width  = 8
+      height = 3
+
+      nrql_query {
+        query = "FROM K8sVolumeSample SELECT latest(fsUsedPercent) facet podName, volumeName, pvcName TIMESERIES"
+      }
+    }
+
+    widget_bar {
+      title  = "Pod Count by Node"
+      row    = 19
+      column = 9
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT uniquecount(podName) FROM K8sPodSample WHERE ((status = 'Running') AND NOT (createdAt IS NULL)) SINCE 10 MINUTES AGO UNTIL 1 MINUTES AGO FACET nodeName"
+      }
+    }
+
+    widget_table {
+      title  = "Pod Network Status"
+      row    = 22
+      column = 1
+      width  = 12
+      height = 3
+
+      nrql_query {
+        query = "SELECT (latest(net.rxBytesPerSecond) / 1000) AS `Received KBps`, (latest(net.txBytesPerSecond) / 1000) AS `Transmitted KBps`, latest(net.errorsPerSecond) AS `Errors / sec` FROM K8sPodSample SINCE 10 MINUTES AGO UNTIL 1 MINUTES AGO FACET podName LIMIT 100"
+      }
+    }
+  }
+
+  # ===== PAGE 2: Kubernetes Clusters and Nodes =====
+  page {
+    name = "Kubernetes Clusters and Nodes"
+
+    widget_markdown {
+      title  = ""
+      row    = 1
+      column = 1
+      width  = 1
+      height = 2
+
+      text = "![Kubernetes](https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Kubernetes_logo_without_workmark.svg/1200px-Kubernetes_logo_without_workmark.svg.png)"
+    }
+
+    widget_table {
+      title  = "Clusters"
+      row    = 1
+      column = 2
+      width  = 5
+      height = 3
+
+      nrql_query {
+        query = "SELECT uniqueCount(nodeName) AS `Nodes`, filter(uniqueCount(podName), WHERE ((status = 'Running') AND NOT (createdAt IS NULL))) AS `Running Pods`, filter(uniqueCount(podName), WHERE ((status IN ('Pending')) AND NOT (createdAt IS NULL))) AS `Pending Pods`, uniqueCount(podName) AS `Total Pods` FROM K8sPodSample SINCE 30 MINUTES AGO FACET clusterName LIMIT 1000"
+      }
+    }
+
+    widget_line {
+      title  = "CPU Usage"
+      row    = 1
+      column = 7
+      width  = 2
+      height = 3
+
+      nrql_query {
+        query = "SELECT ((average(cpuUsedCores) / average(allocatableCpuCores)) * 100) AS `CPU Util %`, 100 AS `100` FROM K8sNodeSample SINCE 30 MINUTES AGO TIMESERIES AUTO"
+      }
+    }
+
+    widget_line {
+      title  = "Memory Usage"
+      row    = 1
+      column = 9
+      width  = 2
+      height = 3
+
+      nrql_query {
+        query = "SELECT ((average(memoryWorkingSetBytes) / average(allocatableMemoryBytes)) * 100) AS `Memory Util %`, 100 AS `100` FROM K8sNodeSample SINCE 30 MINUTES AGO TIMESERIES AUTO"
+      }
+    }
+
+    widget_line {
+      title  = "Disk Usage"
+      row    = 1
+      column = 11
+      width  = 2
+      height = 3
+
+      nrql_query {
+        query = "SELECT ((average(fsUsedBytes) / average(fsCapacityBytes)) * 100) AS `Disk Util %`, 100 AS `100` FROM K8sNodeSample SINCE 30 MINUTES AGO TIMESERIES AUTO"
+      }
+    }
+
+    widget_billboard {
+      title  = ""
+      row    = 3
+      column = 1
+      width  = 1
+      height = 1
+
+      nrql_query {
+        query = "FROM K8sNodeSample SELECT uniqueCount(nodeName) as 'Nodes' WHERE `label.eks.amazonaws.com/compute-type` IS NULL since 30 minutes ago"
+      }
+    }
+
+    widget_billboard {
+      title  = ""
+      row    = 4
+      column = 1
+      width  = 1
+      height = 1
+
+      nrql_query {
+        query = "FROM K8sNodeSample SELECT uniqueCount(nodeName) as 'Serverless Nodes' WHERE `label.eks.amazonaws.com/compute-type` IS NULL since 30 minutes ago"
+      }
+    }
+
+    widget_table {
+      title  = "Nodes"
+      row    = 4
+      column = 2
+      width  = 11
+      height = 5
+
+      nrql_query {
+        query = "SELECT filter(uniqueCount(podName), WHERE (status = 'Running')) AS `Running Pods`, filter(uniqueCount(podName), WHERE (status = 'Pending')) AS `Pending Pods`, ((average(`k8s`.`node.cpuUsedCores`) / average(`k8s`.`node.allocatableCpuCores`)) * 100) AS `CPU %`, ((average(`k8s`.`node.memoryWorkingSetBytes`) / average(`k8s`.`node.allocatableMemoryBytes`)) * 100) AS `Mem %`, ((average(`k8s`.`node.fsUsedBytes`) / average(`k8s`.`node.fsCapacityBytes`)) * 100) AS `Disk Util %` FROM K8sPodSample WHERE (NOT (createdAt IS NULL) AND NOT (nodeName IS NULL)) SINCE 30 MINUTES AGO FACET nodeName LIMIT 2000"
+      }
+    }
+
+    widget_billboard {
+      title  = ""
+      row    = 5
+      column = 1
+      width  = 1
+      height = 1
+
+      nrql_query {
+        query = "FROM K8sPodSample select uniqueCount(podName) as 'Running Pods' where status = 'Running' since 30 minutes ago"
+      }
+    }
+
+    widget_billboard {
+      title  = ""
+      row    = 6
+      column = 1
+      width  = 1
+      height = 1
+
+      nrql_query {
+        query = "FROM K8sPodSample select filter(uniqueCount(podName), where status = 'Running') / filter(uniqueCount(podName), where status in ('Running','Pending')) * 100 as '% Pods Running' since 30 minutes ago"
+      }
+    }
+
+    widget_billboard {
+      title  = ""
+      row    = 7
+      column = 1
+      width  = 1
+      height = 1
+
+      nrql_query {
+        query = "FROM K8sPodSample select uniqueCount(namespaceName) as 'Namespaces' since 30 minutes ago"
+      }
+    }
+
+    widget_billboard {
+      title  = ""
+      row    = 8
+      column = 1
+      width  = 1
+      height = 1
+
+      nrql_query {
+        query = "FROM K8sPodSample select uniqueCount(deploymentName) as 'Deployments' since 30 minutes ago"
+      }
+    }
+  }
+
+  # ===== PAGE 3: Kubernetes Container Restarts =====
+  page {
+    name = "Kubernetes Container Restarts"
+
+    widget_markdown {
+      title  = ""
+      row    = 1
+      column = 1
+      width  = 3
+      height = 7
+
+      text = <<EOT
+# Container Restarts
+---
+![Container](https://github.com/kubernetes/community/blob/master/icons/png/resources/unlabeled/pod-128.png?raw=true)
+
+Container restarts are **usually** not a good thing.  This dashboard will help identify the biggest offenders and where they are currently _trying_ to run.
+EOT
+    }
+
+    widget_table {
+      title  = "Container Restarts"
+      row    = 1
+      column = 4
+      width  = 9
+      height = 7
+
+      nrql_query {
+        query = "SELECT max(restartCount) AS `Restart Count`, latest(reason) AS `Last Restart Reason` FROM K8sContainerSample WHERE (((restartCount > 0) AND NOT (reason IS NULL)) AND NOT (restartCount IS NULL)) SINCE 30 MINUTES AGO FACET tuple(containerName AS `Container Name`, podName AS `Pod Name`, clusterName AS `Cluster Name`) LIMIT 1000"
+      }
+    }
+  }
+
+  # ===== PAGE 4: Kubernetes Pod Status =====
+  page {
+    name = "Kubernetes Pod Status"
+
+    widget_markdown {
+      title  = ""
+      row    = 1
+      column = 1
+      width  = 1
+      height = 2
+
+      text = "![Pod](https://github.com/kubernetes/community/blob/master/icons/png/resources/labeled/pod-128.png?raw=true)"
+    }
+
+    widget_billboard {
+      title  = "Overall Pod Status"
+      row    = 1
+      column = 2
+      width  = 11
+      height = 2
+
+      nrql_query {
+        query = "from K8sPodSample select uniqueCount(podName) as 'Total Pods', filter(uniqueCount(podName), where status = 'Running') as 'Running Pods', filter(uniqueCount(podName), where status = 'Pending') as 'Pending Pods', filter(uniqueCount(podName), where status = 'Failed') as 'Failed Pods' since 30 minutes ago"
+      }
+    }
+
+    widget_table {
+      title  = "Pod Status by Cluster"
+      row    = 3
+      column = 1
+      width  = 5
+      height = 3
+
+      nrql_query {
+        query = "SELECT uniqueCount(podName) AS `Pod Count` FROM K8sPodSample WHERE (NOT (status IS NULL) AND NOT (createdAt IS NULL)) SINCE 30 MINUTES AGO FACET tuple(clusterName AS `Cluster Name`, status AS `Status`) LIMIT 100"
+      }
+    }
+
+    widget_table {
+      title  = "Latest Pending Pods"
+      row    = 3
+      column = 6
+      width  = 7
+      height = 3
+
+      nrql_query {
+        query = "SELECT podName AS `Pod Name`, status AS `Status`, clusterName AS `Cluster Name` FROM K8sPodSample WHERE ((status = 'Pending') AND NOT (createdAt IS NULL)) SINCE 30 MINUTES AGO LIMIT 1000"
+      }
+    }
+
+    widget_table {
+      title  = "Pod OOMKills"
+      row    = 6
+      column = 1
+      width  = 5
+      height = 3
+
+      nrql_query {
+        query = "SELECT count(reason) AS `OOM Kills` FROM K8sContainerSample, K8sPodSample WHERE (reason = 'OOMKilled') SINCE 30 MINUTES AGO FACET tuple(clusterName, podName) LIMIT 1000"
+      }
+    }
+
+    widget_table {
+      title  = "Latest Failed Pods"
+      row    = 6
+      column = 6
+      width  = 7
+      height = 3
+
+      nrql_query {
+        query = "SELECT podName AS `Pod Name`, status AS `Status`, clusterName AS `Cluster Name` FROM K8sPodSample WHERE ((status = 'Failed') AND NOT (createdAt IS NULL)) SINCE 30 MINUTES AGO LIMIT 1000"
+      }
+    }
+
+    widget_bar {
+      title  = "Pods Restarts"
+      row    = 9
+      column = 1
+      width  = 12
+      height = 3
+
+      nrql_query {
+        query = "SELECT (max(restartCount) - min(restartCount)) FROM K8sContainerSample FACET tuple(podName, namespaceName)"
+      }
+    }
+  }
+
+  # ===== PAGE 5: Kubernetes Utilization =====
+  page {
+    name = "Kubernetes Utilization"
+
+    widget_area {
+      title  = "CPU Used (Cores) by Node"
+      row    = 1
+      column = 1
+      width  = 12
+      height = 3
+
+      nrql_query {
+        query = "SELECT average(cpuUsedCores) FROM K8sNodeSample SINCE 60 MINUTES AGO FACET nodeName TIMESERIES AUTO"
+      }
+    }
+
+    # Note: heatmap doesn't have a direct equivalent in the terraform format
+    # Using a standard visualization for now
+    widget_bar {
+      title  = "CPU % by Instance Type"
+      row    = 4
+      column = 1
+      width  = 8
+      height = 3
+
+      nrql_query {
+        query = "SELECT histogram(cpuPercent, 100, 25) FROM ProcessSample FACET instanceType"
+      }
+    }
+
+    widget_line {
+      title  = "Memory Usage by pod, container"
+      row    = 4
+      column = 9
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT ((average(memoryUsedBytes) / average(memoryLimitBytes)) * 100) AS `Memory Used %` FROM K8sContainerSample SINCE 60 MINUTES AGO FACET tuple(podName, containerName) LIMIT 1000 TIMESERIES AUTO"
+      }
+    }
+
+    # Another heatmap
+    widget_bar {
+      title  = "CPU % by Namespace"
+      row    = 7
+      column = 1
+      width  = 8
+      height = 3
+
+      nrql_query {
+        query = "SELECT histogram(cpuPercent, 10, 100) FROM ProcessSample FACET containerLabel_io.kubernetes.pod.namespace"
+      }
+    }
+
+    widget_line {
+      title  = "MAX CPU Cores Requested by Container"
+      row    = 7
+      column = 9
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT max(cpuRequestedCores) FROM K8sContainerSample SINCE 30 MINUTES AGO FACET containerName TIMESERIES AUTO"
+      }
+    }
+  }
+
+  # ===== PAGE 6: Kubernetes Cluster Events =====
+  page {
+    name = "Kubernetes Cluster Events"
+
+    widget_markdown {
+      title  = ""
+      row    = 1
+      column = 1
+      width  = 1
+      height = 4
+
+      text = "![Logo](https://constructionlinks.ca/wp-content/uploads/2020/07/procore-logo-2020.jpg)"
+    }
+
+    widget_pie {
+      title  = "Event Breakdown"
+      row    = 1
+      column = 2
+      width  = 7
+      height = 4
+
+      nrql_query {
+        query = "FROM InfrastructureEvent select max(event.count) as 'Event Count' where category = 'kubernetes' and event.reason like '%Fail%' or event.reason like '%Kill%' or event.reason like '%Evict%' or event.reason like '%BackOff%' facet event.reason limit 1000 since 1 day ago"
+      }
+    }
+
+    widget_billboard {
+      title  = "Murders"
+      row    = 1
+      column = 9
+      width  = 2
+      height = 2
+
+      nrql_query {
+        query = "FROM InfrastructureEvent SELECT count(event.count) as 'Murders' WHERE category = 'kubernetes' AND event.reason like '%Kill%'"
+      }
+    }
+
+    widget_billboard {
+      title  = "Backoffs"
+      row    = 1
+      column = 11
+      width  = 2
+      height = 2
+
+      nrql_query {
+        query = "FROM InfrastructureEvent SELECT count(event.count) as 'Backoffs' WHERE category = 'kubernetes' AND event.reason like '%BackOff%'"
+      }
+    }
+
+    widget_billboard {
+      title  = "Evictions"
+      row    = 3
+      column = 9
+      width  = 2
+      height = 2
+
+      nrql_query {
+        query = "FROM InfrastructureEvent select count(event.count) as 'Evictions' where category = 'kubernetes' AND event.reason like '%Evicted%' "
+      }
+    }
+
+    widget_billboard {
+      title  = "Pod Failures"
+      row    = 3
+      column = 11
+      width  = 2
+      height = 2
+
+      nrql_query {
+        query = "FROM InfrastructureEvent select count(event.count) as 'Pod Fails' where category = 'kubernetes' AND event.reason like '%Fail%' "
+      }
+
+      # Adding thresholds as they appear in the JSON
+      threshold {
+        value               = 0
+        operator            = "above"
+        threshold_critical  = true
+      }
+
+      threshold {
+        value               = 0
+        operator            = "above"
+        threshold_warning   = true
+      }
+    }
+
+    widget_table {
+      title  = "Cluster Events"
+      row    = 5
+      column = 1
+      width  = 6
+      height = 4
+
+      nrql_query {
+        query = "FROM InfrastructureEvent select max(event.count) as 'Event Count', latest(event.lastTimestamp), latest(entityName) where category = 'kubernetes' and event.reason like '%Fail%' or event.reason like '%Kill%' or event.reason like '%Evict%' or event.reason like '%BackOff%' facet event.reason, clusterName, event.involvedObject.name, event.involvedObject.kind  limit 1000 since 1 day ago where clusterName = 'pixie-auto-telemetry'"
+      }
+    }
+
+    widget_line {
+      title  = "Timeseries of Kubernetes Cluster Events"
+      row    = 5
+      column = 7
+      width  = 6
+      height = 4
+
+      nrql_query {
+        query = "FROM InfrastructureEvent select count(event.count) as 'Event Count' where category = 'kubernetes' and event.reason like '%Fail%' or event.reason like '%Kill%' or event.reason like '%Evict%' or event.reason like '%BackOff%' facet event.reason limit 1000 since 1 day ago TIMESERIES AUTO "
+      }
+    }
+  }
+
+  # ===== PAGE 7: Optimization View =====
+  page {
+    name = "Optimization View"
+
+    widget_billboard {
+      title  = "Current Resource Configuration"
+      row    = 1
+      column = 1
+      width  = 2
+      height = 3
+
+      nrql_query {
+        query = "SELECT latest(cpuRequestedCores) AS 'CPU request', \nlatest(cpuLimitCores) AS 'CPU limit', \nlatest(memoryRequestedBytes/1024/1024) AS 'Memory request (MB)', \nlatest(memoryLimitBytes/1024/1024) AS 'Memory limit (MB)' \nFROM K8sContainerSample SINCE 1 week ago"
+      }
+    }
+
+    widget_billboard {
+      title  = "Suggested Resource Configuration"
+      row    = 1
+      column = 3
+      width  = 2
+      height = 3
+
+      nrql_query {
+        query = "SELECT percentile(cpuUsedCores, 95) * (1 + 50/100) AS 'CPU request', \npercentile(cpuUsedCores, 95) * (1 + 100/100) AS 'CPU limit', \npercentile(memoryUsedBytes/1024/1024, 95) * (1 + 50/100) AS 'Memory request (MB)', \npercentile(memoryUsedBytes/1024/1024, 95) * (1 + 100/100) AS 'Memory limit (MB)' \nFROM K8sContainerSample SINCE 1 week ago"
+      }
+    }
+
+    widget_billboard {
+      title  = "Potential Resource Savings per Replica"
+      row    = 1
+      column = 5
+      width  = 2
+      height = 3
+
+      nrql_query {
+        query = "SELECT latest(cpuRequestedCores) - (percentile(cpuUsedCores, 95) * (1 + 50/100)) AS 'CPU request', \nlatest(cpuLimitCores) - (percentile(cpuUsedCores, 95) * (1 + 100/100)) AS 'CPU limit', \nlatest(memoryRequestedBytes/1024/1024) - (percentile(memoryUsedBytes/1024/1024, 95) * (1 + 50/100)) AS 'Memory request (MB)', \nlatest(memoryLimitBytes/1024/1024) - (percentile(memoryUsedBytes/1024/1024, 95) * (1 + 100/100)) AS 'Memory limit (MB)' \nFROM K8sContainerSample SINCE 1 week ago"
+      }
+
+      # Adding thresholds as they appear in the JSON
+      threshold {
+        value               = -50000
+        operator            = "above"
+        threshold_critical  = true
+      }
+
+      threshold {
+        value               = -0.01
+        operator            = "above"
+        threshold_warning   = true
+      }
+    }
+
+    widget_markdown {
+      title  = ""
+      row    = 1
+      column = 7
+      width  = 5
+      height = 3
+
+      text = <<EOT
+# About This Page
+ **Use the suggested recommendations to highly POTENTIAL optimizations, and test well before shipping to any production environments.  Always make sure you use filters to narrow down the set of data so that the recommendations are sensible.  For example filter by such attributes as cluster, deployment, and namesspace.**
+
+  ## How to Use These Recommendations
+
+  There are several specific variables in your K8s configurations that can be adjusted based on what you see in this report.
+  
+ * [Requests & Limits](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#requests-and-limits)
+  * [Memory](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#meaning-of-memory)
+  * [CPU](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#meaning-of-cpu)
+   * [ResourceQuota](https://kubernetes.io/docs/concepts/policy/resource-quotas/)
+  * [LimitRange](https://kubernetes.io/docs/concepts/policy/limit-range/)
+  
+ **The mechanics behind k8s resources are explained here:** https://blog.kubecost.com/blog/requests-and-limits/
+
+ ## Acknowledgement
+
+At Futurestack 2022 we showed how to use this data to potentially optimize both memory and CPU configures. Please utilize the dashboard filtering capabilities to filter to a specfic cluster, namespace, or container.
+
+## See the Futurestack presentation by [Frank Dornberger](https://newrelic.com/blog/authors/frank-dornberger) [here](https://www.youtube.com/watch?v=yiv1hnfekl4) and Frank's blog post [here](https://newrelic.com/blog/how-to-relic/movingimage-kubernetes-containers)
+## The demonstration environment from the workshop can be found in [Github](https://github.com/frank-dornberger/futurestack-2022-workshop).
+EOT
+    }
+
+    widget_line {
+      title  = "High CPU Throttle Count (indicator of over-utilization)"
+      row    = 4
+      column = 1
+      width  = 3
+      height = 3
+
+      nrql_query {
+        query = "SELECT sum(containerCpuCfsThrottledPeriodsDelta) FROM K8sContainerSample SINCE 1 week ago FACET containerName TIMESERIES MAX"
+      }
+    }
+
+    widget_line {
+      title  = "High OOM Killed Count (indicator of over-utilization)"
+      row    = 4
+      column = 4
+      width  = 3
+      height = 3
+
+      nrql_query {
+        query = "SELECT count(*) FROM K8sContainerSample WHERE reason = 'OOMKilled' SINCE 1 week ago FACET containerName TIMESERIES MAX"
+      }
+    }
+
+    widget_markdown {
+      title  = ""
+      row    = 4
+      column = 7
+      width  = 5
+      height = 3
+
+      text = <<EOT
+## Over-Utilization Indicators
+
+In some environments we may be over-utilizing key resources.  In those scenarios optimization is contra-indicated.
+
+CPU Thottling and OOM Kills are good indicators of potential overutilization of CPU and Memory resources.
+
+[Assigning CPU Resources to Containers and Pods](https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/)
+
+[Assigning Memory Resources to Containers and Pods](https://kubernetes.io/docs/tasks/configure-pod-container/assign-memory-resource/)
+EOT
+    }
+
+    widget_table {
+      title  = "Suggestion Report"
+      row    = 7
+      column = 1
+      width  = 11
+      height = 9
+
+      nrql_query {
+        query = "SELECT latest(cpuRequestedCores) AS 'current CPU request', \nlatest(cpuLimitCores) AS 'current CPU limit', latest(memoryRequestedBytes/1024/1024) AS 'current Memory request (MB)', latest(memoryLimitBytes/1024/1024) AS 'current Memory limit (MB)', percentile(cpuUsedCores, 95) * (1 + 50/100) AS 'suggested CPU request', \n\npercentile(cpuUsedCores, 95) * (1 + 100/100) AS 'suggested CPU limit', \naverage(containerCpuCfsThrottledPeriodsDelta) AS 'Avg. Throttles', \n\npercentile(memoryUsedBytes/1024/1024, 95) * (1 + 50/100) AS 'suggested Memory request (MB)', \n\npercentile(memoryUsedBytes/1024/1024, 95) * (1 + 100/100) AS 'suggested Memory limit (MB)'\nFROM K8sContainerSample SINCE 1 month ago \nFACET namespace, containerName AS 'Container' LIMIT MAX"
+      }
+    }
+  }
+}
