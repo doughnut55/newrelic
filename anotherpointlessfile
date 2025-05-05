@@ -291,4 +291,337 @@ EOT
       title  = ""
       row    = 1
       column = 1
-      width  =
+      width  = 12
+      height = 1
+      
+      text = "# JVM's\nWith the help of Java Agent, you can easily track your Application's heap memory usage, heap memory pool usage, Non-heap memory pool usage and garbage collection."
+    }
+
+    widget_area {
+      title  = "Heap Memory Usage (MB)"
+      row    = 2
+      column = 1
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT average(apm.service.memory.heap.max) as 'Max Heap', average(apm.service.memory.heap.committed) as 'Committed Heap', average(apm.service.memory.heap.used) as 'Used Heap' FROM Metric TIMESERIES AUTO"
+      }
+    }
+
+    widget_bar {
+      title  = "Garbage Collection"
+      row    = 2
+      column = 5
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT average(newrelic.timeslice.value)*1000 FROM Metric WHERE metricTimesliceName LIKE 'GC%' FACET metricTimesliceName TIMESERIES"
+      }
+    }
+
+    widget_bar {
+      title  = "Class Count"
+      row    = 2
+      column = 9
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT average(newrelic.timeslice.value)* 1000 FROM Metric where metricTimesliceName like 'JmxBuiltIn/Classes%' FACET metricTimesliceName"
+      }
+    }
+
+    widget_area {
+      title  = "Heap MemoryPool Usage(MB)"
+      row    = 5
+      column = 1
+      width  = 6
+      height = 3
+      
+      nrql_query {
+        query = "FROM Metric SELECT count(newrelic.timeslice.value) * 1000 where metricTimesliceName like 'MemoryPool/Heap%' FACET metricTimesliceName TIMESERIES"
+      }
+    }
+
+    widget_area {
+      title  = "Non-Heap MemoryPool Usage(MB)"
+      row    = 5
+      column = 7
+      width  = 6
+      height = 3
+      
+      nrql_query {
+        query = "FROM Metric SELECT count(newrelic.timeslice.value) * 1000 where metricTimesliceName like 'MemoryPool/Non-Heap%' FACET metricTimesliceName TIMESERIES"
+      }
+    }
+
+    widget_markdown {
+      title  = ""
+      row    = 8
+      column = 1
+      width  = 12
+      height = 1
+      
+      text = "# Thread\nView details about thread counts and thread state."
+    }
+
+    widget_bar {
+      title  = "Top 5 Time Consuming Threads"
+      row    = 9
+      column = 1
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT sum(newrelic.timeslice.value) FROM Metric WITH METRIC_FORMAT 'Threads/TotalTime/{thread}/CpuTime' WHERE metricTimesliceName LIKE 'Threads/TotalTime/%/CpuTime' AND thread NOT LIKE '%New Relic%' FACET `thread` LIMIT 5"
+      }
+    }
+
+    widget_line {
+      title  = "Average Thread Count"
+      row    = 9
+      column = 5
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT average(newrelic.timeslice.value) AS `JmxBuiltIn/Threads/Thread Count` FROM Metric WHERE metricTimesliceName = 'JmxBuiltIn/Threads/Thread Count' TIMESERIES"
+      }
+    }
+
+    widget_area {
+      title  = "Thread State"
+      row    = 9
+      column = 9
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT sum(newrelic.timeslice.value) FROM Metric WITH METRIC_FORMAT 'Threads/SummaryState/{threadstate}/Count' WHERE metricTimesliceName LIKE 'Threads/SummaryState/%/Count' AND threadstate NOT LIKE '%New Relic%' FACET `threadstate` LIMIT 5 SINCE 604800 seconds AGO TIMESERIES"
+      }
+    }
+  }
+
+  # ===== PAGE 4: Databases =====
+  page {
+    name = "Databases"
+
+    widget_markdown {
+      title  = ""
+      row    = 1
+      column = 1
+      width  = 12
+      height = 1
+      
+      text = "# Databases\nUsing the New Relic Java agent, you have the ability to understand database operations, which is the best indicator of performance."
+    }
+
+    widget_bar {
+      title  = "Table Names"
+      row    = 2
+      column = 1
+      width  = 2
+      height = 3
+      
+      nrql_query {
+        query = "FROM Metric SELECT average(apm.service.datastore.operation.duration * 1000) AS 'Average Operation Duration (seconds)' FACET table"
+      }
+    }
+
+    widget_bar {
+      title  = "Data Store Type"
+      row    = 2
+      column = 3
+      width  = 3
+      height = 3
+      
+      nrql_query {
+        query = "SELECT sum(apm.service.datastore.operation.duration * 1000) FROM Metric FACET `datastoreType`"
+      }
+    }
+
+    widget_area {
+      title  = "Top Databases - By Throughput"
+      row    = 2
+      column = 6
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT rate(count(apm.service.datastore.operation.duration), 1 minute) FROM Metric TIMESERIES facet concat(datastoreType, ' ', table, ' ', operation)"
+      }
+    }
+
+    widget_area {
+      title  = "Database Connection Attempts - By Average"
+      row    = 2
+      column = 10
+      width  = 3
+      height = 3
+      
+      nrql_query {
+        query = "SELECT average(newrelic.timeslice.value) AS 'Datastore/getConnection' FROM Metric WHERE metricTimesliceName = 'Datastore/getConnection' LIMIT MAX TIMESERIES"
+      }
+    }
+
+    widget_area {
+      title  = "Database Connection Attempts - By Count"
+      row    = 5
+      column = 1
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT count(newrelic.timeslice.value) AS 'Datastore/getConnection' FROM Metric WHERE (metricTimesliceName = 'Datastore/getConnection') LIMIT MAX TIMESERIES"
+      }
+    }
+
+    widget_area {
+      title  = "Top 5 Database Operations - By Time Consumed"
+      row    = 5
+      column = 5
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT sum(apm.service.datastore.operation.duration * 1000) FROM Metric FACET `datastoreType`, `table`, `operation` LIMIT 5 TIMESERIES"
+      }
+    }
+
+    widget_area {
+      title  = "Top 5 Databases - By Query Time"
+      row    = 5
+      column = 9
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT average(apm.service.datastore.operation.duration * 1000) FROM Metric FACET `datastoreType`, `table`, `operation` LIMIT 5 TIMESERIES"
+      }
+    }
+  }
+
+  # ===== PAGE 5: Error =====
+  page {
+    name = "Error"
+
+    widget_billboard {
+      title  = "Errors Overview"
+      row    = 1
+      column = 1
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "FROM Transaction SELECT percentage(count(*), WHERE error IS true) as 'Failed transactions (%)', count(*) * percentage(count(*), WHERE error IS true) / 100 as 'Failed transactions'"
+      }
+    }
+
+    widget_line {
+      title  = "Transactions Errors Today Compared With 1 Day Ago"
+      row    = 1
+      column = 5
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT count(*) from TransactionError since today COMPARE WITH 1 day ago TIMESERIES"
+      }
+    }
+
+    widget_billboard {
+      title  = "Errors by Transaction Type"
+      row    = 1
+      column = 9
+      width  = 4
+      height = 3
+      
+      nrql_query {
+        query = "SELECT count(*) FROM Transaction FACET transactionType WHERE error is true"
+      }
+    }
+
+    widget_table {
+      title  = "Transaction Errors Day By Day"
+      row    = 4
+      column = 1
+      width  = 5
+      height = 3
+      
+      nrql_query {
+        query = "FROM TransactionError SELECT count(*) FACET dateOf(timestamp)"
+      }
+    }
+
+    widget_line {
+      title  = "Transaction Errors"
+      row    = 4
+      column = 6
+      width  = 7
+      height = 3
+      
+      nrql_query {
+        query = "SELECT count(*) FROM TransactionError WHERE `error.expected` IS FALSE OR `error.expected` IS NULL FACET `error.class`, `transactionUiName`, `error.message` TIMESERIES"
+      }
+    }
+  }
+
+  # ===== PAGE 6: Log =====
+  page {
+    name = "Log"
+
+    widget_markdown {
+      title  = ""
+      row    = 1
+      column = 1
+      width  = 12
+      height = 1
+      
+      text = <<EOT
+# Log
+
+To see the logs of your application, please remove any existing filters. Filter the logs by selecting log entity name from the below chart.
+EOT
+    }
+
+    widget_bar {
+      title  = "Log Entity Names (click on the entity name to filter)"
+      row    = 2
+      column = 1
+      width  = 3
+      height = 3
+      
+      nrql_query {
+        query = "FROM Log SELECT count(*) FACET entity.name"
+      }
+    }
+
+    widget_line {
+      title  = "Logs by Severity Level"
+      row    = 2
+      column = 4
+      width  = 3
+      height = 3
+      
+      nrql_query {
+        query = "SELECT count(*) FROM Log LIMIT MAX TIMESERIES facet level"
+      }
+    }
+
+    # For the log table widget, we need to use a special widget type that doesn't seem to be directly supported in Terraform
+    # We'll use a table widget as the closest approximation
+    widget_table {
+      title  = "Log Entries"
+      row    = 2
+      column = 7
+      width  = 6
+      height = 3
+      
+      nrql_query {
+        query = "FROM Log SELECT *"
+      }
+    }
+  }
+}
